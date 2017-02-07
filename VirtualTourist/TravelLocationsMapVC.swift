@@ -8,6 +8,7 @@
 
 import UIKit
 import MapKit
+import CoreData
 
 class TravelLocationsMapVC: UIViewController, MKMapViewDelegate, UIGestureRecognizerDelegate {
 
@@ -16,11 +17,54 @@ class TravelLocationsMapVC: UIViewController, MKMapViewDelegate, UIGestureRecogn
     
     var gestureBegin: Bool = false
     var editMode: Bool = false
+    var currentPins:[Pin] = []
+    
+    func getCoreDataStack() -> CoreDataStack {
+        let delegate = UIApplication.shared.delegate as! AppDelegate
+        return delegate.stack
+    }
+    
+    func getFetchedResultsController() -> NSFetchedResultsController<NSFetchRequestResult> {
+        // Get the stack
+        let stack = getCoreDataStack()
+        
+        // Create a fetchrequest
+        let fr = NSFetchRequest<NSFetchRequestResult>(entityName: "Pin")
+        fr.sortDescriptors = []
+        
+        // Create the FetchedResultsController
+        return NSFetchedResultsController(fetchRequest: fr, managedObjectContext: stack.context, sectionNameKeyPath: nil, cacheName: nil)
+    }
+    
+    func preloadSavedPin() -> [Pin]? {
+        
+        do {
+            var pinArray:[Pin] = []
+            let fetchedResultsController = getFetchedResultsController()
+            try fetchedResultsController.performFetch()
+            let pinCount = try fetchedResultsController.managedObjectContext.count(for: fetchedResultsController.fetchRequest)
+            for index in 0..<pinCount {
+                pinArray.append(fetchedResultsController.object(at: IndexPath(row: index, section: 0)) as! Pin)
+            }
+            return pinArray
+        } catch {
+            return nil
+        }
+    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
         setRightBarButtonItem()
+        
+        let savedPins = preloadSavedPin()
+        if savedPins != nil {
+            currentPins = savedPins!
+            for pin in currentPins {
+                let coord = CLLocationCoordinate2D(latitude: pin.latitude, longitude: pin.longitude)
+                addAnnotationToMap(fromCoord: coord)
+            }
+        }
     }
     
     func setRightBarButtonItem() {
@@ -54,18 +98,54 @@ class TravelLocationsMapVC: UIViewController, MKMapViewDelegate, UIGestureRecogn
         let coordToAdd = mapView.convert(fromPoint, toCoordinateFrom: mapView)
         let annotation = MKPointAnnotation()
         annotation.coordinate = coordToAdd
+        addCoreData(of: annotation)
         mapView.addAnnotation(annotation)
+    }
+    
+    func addAnnotationToMap(fromCoord: CLLocationCoordinate2D) {
+        let annotation = MKPointAnnotation()
+        annotation.coordinate = fromCoord
+        mapView.addAnnotation(annotation)
+    }
+    
+    func addCoreData(of: MKAnnotation) {
+        do {
+            let coord = of.coordinate
+            let pin = Pin(latitude: coord.latitude, longitude: coord.longitude, context: getCoreDataStack().context)
+            try getCoreDataStack().saveContext()
+            currentPins.append(pin)
+        } catch {
+            print("add core data failed")
+        }
     }
     
     func removeCoreData(of: MKAnnotation) {
         let coord = of.coordinate
-        // TODO
+        for pin in currentPins {
+            if pin.latitude == coord.latitude && pin.longitude == coord.longitude {
+                do {
+                    getCoreDataStack().context.delete(pin)
+                    try getCoreDataStack().saveContext()
+                } catch {
+                    print("remove core data failed")
+                }
+                break
+            }
+        }
     }
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if segue.identifier == "photoAlbumSegue" {
             let destination = segue.destination as! PhotoAlbumVC
-            destination.coordinateSelected = sender as! CLLocationCoordinate2D
+            let coord = sender as! CLLocationCoordinate2D
+            destination.coordinateSelected = coord
+            for pin in currentPins {
+                if pin.latitude == coord.latitude && pin.longitude == coord.longitude {
+                    destination.coreDataPin = pin
+                    break
+                }
+            }
+            
         }
     }
     

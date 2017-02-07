@@ -23,7 +23,7 @@ class PhotoAlbumVC: UIViewController, UICollectionViewDataSource, UICollectionVi
     
     var coreDataPin:Pin!
     var savedImages:[Photo] = []
-    var selectedToDelete:[Int]! {
+    var selectedToDelete:[Int] = [] {
         didSet {
             if selectedToDelete.count > 0 {
                 bottomButton.setTitle("Remove Selected Pictures", for: .normal)
@@ -101,13 +101,13 @@ class PhotoAlbumVC: UIViewController, UICollectionViewDataSource, UICollectionVi
     func removeSelectedPicturesAtCoreData() {
         for index in 0..<savedImages.count {
             if selectedToDelete.contains(index) {
-                do {
-                    getCoreDataStack().context.delete(savedImages[index])
-                    try getCoreDataStack().saveContext()
-                } catch {
-                    print("remove coredata photo failed")
-                }
+                getCoreDataStack().context.delete(savedImages[index])
             }
+        }
+        do {
+            try getCoreDataStack().saveContext()
+        } catch {
+            print("remove coredata photo failed")
         }
         selectedToDelete.removeAll()
     }
